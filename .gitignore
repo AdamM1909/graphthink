@@ -1,0 +1,15 @@
+# Ignore SQLite database files
+*.sqlite
+*.sqlite3
+*.db
+*.db3
+
+# Ignore SQLite temp files
+*.sqlite-shm
+*.sqlite-wal
+
+# Ignore notebooks
+*.ipynb
+
+# Ignore pycache
+*.pyc
