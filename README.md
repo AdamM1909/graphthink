@@ -1,1 +1,1 @@
-A better way of expanding knowledge. Graphthink will start by putting flashcards into the spatial domain and aims to add a distance / graph connection component to a standard spaced repetion study schedule.
+A better way of expanding knowledge. Graphthink will start by putting flashcards into the spatial domain and aims to add a distance / graph connection component to a standard spaced repetition study schedule.
