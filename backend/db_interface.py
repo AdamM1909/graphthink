@@ -22,24 +22,80 @@ class GraphDB:
         self.conn.commit()
         return edge_id
     
-    def get_nodes_connected_by_edge_type(self, edge_type_name):
-            edge_type_id = self._get_edge_type_id(edge_type_name)
-            
-            query = """
-            SELECT DISTINCT n.id AS node_id, n.question, n.answer, n.x, n.y,
-                            GROUP_CONCAT(DISTINCT nt.name) AS node_types
-            FROM nodes n
-            JOIN edges e ON n.id = e.source_id OR n.id = e.target_id
-            JOIN edge_type_associations eta ON e.id = eta.edge_id
-            LEFT JOIN node_type_associations nta ON n.id = nta.node_id
-            LEFT JOIN node_types nt ON nta.type_id = nt.id
-            WHERE eta.type_id = ?
-            GROUP BY n.id
+    def get_subgraph(self, node_conditions=None, edge_conditions=None, node_logic="AND", edge_logic="AND"):
+        node_query = ""
+        edge_query = ""
+
+        # Subquery to filter nodes based on the node conditions
+        if node_conditions:
+            node_types_subquery = f"""
+                SELECT node_id 
+                FROM node_type_associations 
+                WHERE type_id IN (
+                    SELECT id FROM node_types WHERE name IN ({",".join("?" for _ in node_conditions)})
+                )
+                GROUP BY node_id
+                HAVING COUNT(DISTINCT type_id) {'=' if node_logic == "AND" else '>'} {len(node_conditions) if node_logic == "AND" else 0}
             """
-            
-            cursor = self.conn.cursor()
-            cursor.execute(query, (edge_type_id,))
-            return [dict(row) for row in cursor.fetchall()]
+            node_query = f"node.id IN ({node_types_subquery})"
+
+        # Subquery to filter edges based on the edge conditions
+        if edge_conditions:
+            edge_types_subquery = f"""
+                SELECT edge_id 
+                FROM edge_type_associations 
+                WHERE type_id IN (
+                    SELECT id FROM edge_types WHERE name IN ({",".join("?" for _ in edge_conditions)})
+                )
+                GROUP BY edge_id
+                HAVING COUNT(DISTINCT type_id) {'=' if edge_logic == "AND" else '>'} {len(edge_conditions) if edge_logic == "AND" else 0}
+            """
+            edge_query = f"(edge.id IN ({edge_types_subquery}))"
+
+        # Final query ensuring both ends of the edge satisfy the node condition
+        query = f"""
+            WITH FilteredNodes AS (
+                SELECT node.id, node.question, node.answer, node.x, node.y
+                FROM nodes node
+                {"WHERE " + node_query if node_query else ""}
+            )
+            SELECT DISTINCT edge.id, edge.source_id, edge.target_id, fn_source.id AS source_node_id, fn_target.id AS target_node_id
+            FROM edges edge
+            JOIN FilteredNodes fn_source ON edge.source_id = fn_source.id
+            JOIN FilteredNodes fn_target ON edge.target_id = fn_target.id
+            {"WHERE " + edge_query if edge_query else ""}
+        """
+
+        params = []
+        if node_conditions:
+            params.extend(node_conditions)
+        if edge_conditions:
+            params.extend(edge_conditions)
+
+        cursor = self.conn.execute(query, params)
+        edges = cursor.fetchall()
+
+        # Extracting the unique nodes from the edges
+        node_ids = set()
+        for edge in edges:
+            node_ids.add(edge[3])  # source_node_id
+            node_ids.add(edge[4])  # target_node_id
+
+        # Query to fetch the node details
+        if node_ids:
+            nodes_query = f"""
+                SELECT id, question, answer, x, y
+                FROM nodes
+                WHERE id IN ({",".join("?" for _ in node_ids)})
+            """
+            nodes_cursor = self.conn.execute(nodes_query, list(node_ids))
+            nodes = nodes_cursor.fetchall()
+        else:
+            nodes = []
+
+        # Return nodes and edges separately
+        return nodes, edges
+        
     
     def get_node_types(self, node_id):
         cursor = self.conn.cursor()
@@ -85,25 +141,26 @@ class GraphDB:
         self.conn.execute("CREATE TABLE IF NOT EXISTS edge_types (id INTEGER PRIMARY KEY, name TEXT UNIQUE)")
         self.conn.execute("CREATE TABLE IF NOT EXISTS node_type_associations (node_id INTEGER, type_id INTEGER, FOREIGN KEY (node_id) REFERENCES nodes (id), FOREIGN KEY (type_id) REFERENCES node_types (id), PRIMARY KEY (node_id, type_id))")
         self.conn.execute("CREATE TABLE IF NOT EXISTS edge_type_associations (edge_id INTEGER, type_id INTEGER, FOREIGN KEY (edge_id) REFERENCES edges (id), FOREIGN KEY (type_id) REFERENCES edge_types (id), PRIMARY KEY (edge_id, type_id))")
+        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_node_type_associations_node_id ON node_type_associations(node_id)")
+        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_node_type_associations_type_id ON node_type_associations(type_id)")
+        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_edge_type_associations_edge_id ON edge_type_associations(edge_id)")
+        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_edge_type_associations_type_id ON edge_type_associations(type_id)")
+        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_edges_source_id ON edges(source_id)")
+        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_edges_target_id ON edges(target_id)")
         self.conn.commit()
         
 if __name__ == '__main__':
     # Create an instance of GraphDB
     db = GraphDB('black_holes.sqlite')
+    if False:
+        # Add nodes (flashcards) about black holes
+        node1_id = db.add_node(question="What is a black hole?", answer="A black hole is a region of space where the gravitational pull is so strong that not even light can escape.", x=0, y=0, node_types=["concept"])
+        node2_id = db.add_node(question="How are black holes formed?", answer="Black holes are formed when massive stars collapse under their own gravity at the end of their life cycle.", x=1, y=0, node_types=["formation"])
+        node3_id = db.add_node(question="What is the event horizon?", answer="The event horizon is the boundary surrounding a black hole beyond which nothing can escape.", x=0, y=1, node_types=["structure"])
+        node4_id = db.add_node(question="What is the singularity?", answer="The singularity is the point at the center of a black hole where gravity is thought to be infinite.", x=1, y=1, node_types=["structure"])
 
-    # Add nodes (flashcards) about black holes
-    node1_id = db.add_node(question="What is a black hole?", answer="A black hole is a region of space where the gravitational pull is so strong that not even light can escape.", x=0, y=0, node_types=["concept"])
-    node2_id = db.add_node(question="How are black holes formed?", answer="Black holes are formed when massive stars collapse under their own gravity at the end of their life cycle.", x=1, y=0, node_types=["formation"])
-    node3_id = db.add_node(question="What is the event horizon?", answer="The event horizon is the boundary surrounding a black hole beyond which nothing can escape.", x=0, y=1, node_types=["structure"])
-    node4_id = db.add_node(question="What is the singularity?", answer="The singularity is the point at the center of a black hole where gravity is thought to be infinite.", x=1, y=1, node_types=["structure"])
-
-    # You can add edges if needed to represent relationships between these concepts.
-    # For example, linking the concept of a black hole to its formation:
-
-    db.add_edge(source_id=node1_id, target_id=node2_id, edge_types=["related_to"])
-    db.add_edge(source_id=node1_id, target_id=node3_id, edge_types=["contains"])
-    db.add_edge(source_id=node3_id, target_id=node4_id, edge_types=["contains"])
-
-    # Don't forget to close the database connection when you're done
-    db.close()
+        db.add_edge(source_id=node1_id, target_id=node2_id, edge_types=["related_to"])
+        db.add_edge(source_id=node1_id, target_id=node3_id, edge_types=["contains", "related_to"])
+        db.add_edge(source_id=node3_id, target_id=node4_id, edge_types=["contains"])
     print('ok')
+    db.close()
