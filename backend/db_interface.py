@@ -1,5 +1,6 @@
 import sqlite3
 
+__all__ = ['GraphDB']
 class GraphDB:
     def __init__(self, db_name):
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
@@ -10,7 +11,7 @@ class GraphDB:
         cursor = self.conn.cursor()
         cursor.execute("INSERT INTO nodes (question, answer, x, y) VALUES (?, ?, ?, ?)", (question, answer, x, y))
         node_id = cursor.lastrowid
-        for node_type in node_types: cursor.execute("INSERT INTO node_type_associations (node_id, type_id) VALUES (?, ?)", (node_id, self._get_node_type_id(node_type)))
+        for node_type in node_types: cursor.execute("INSERT INTO node_type_associations (node_id, type_id) VALUES (?, ?)", (node_id, self._get_id('node_type',node_type)))
         self.conn.commit()
         return node_id
     
@@ -18,41 +19,27 @@ class GraphDB:
         cursor = self.conn.cursor()
         cursor.execute("INSERT INTO edges (source_id, target_id) VALUES (?, ?)", (source_id, target_id))
         edge_id = cursor.lastrowid
-        for edge_type in edge_types: cursor.execute("INSERT INTO edge_type_associations (edge_id, type_id) VALUES (?, ?)", (edge_id, self._get_edge_type_id(edge_type)))
+        for edge_type in edge_types: cursor.execute("INSERT INTO edge_type_associations (edge_id, type_id) VALUES (?, ?)", (edge_id, self._get_id('edge_type', edge_type)))
         self.conn.commit()
         return edge_id
     
-    def get_subgraph(self, node_conditions=None, edge_conditions=None, node_logic="AND", edge_logic="AND"):
-        node_query = ""
-        edge_query = ""
+    def get_subgraph(self, node_conditions=[], edge_conditions=[], node_logic="AND", edge_logic="AND"):
+        def part_subquery(part, conditions, logic):
+            if conditions:
+                subquery = f"""
+                    SELECT {part}_id 
+                    FROM {part}_type_associations 
+                    WHERE type_id IN (
+                        SELECT id FROM {part}_types WHERE name IN ({",".join("?" for _ in conditions)})
+                    )
+                    GROUP BY {part}_id
+                    HAVING COUNT(DISTINCT type_id) {'=' if logic == "AND" else '>'} {len(conditions) if logic == "AND" else 0}
+                """
+                return f"{part}.id IN ({subquery})" 
+            return None
 
-        # Subquery to filter nodes based on the node conditions
-        if node_conditions:
-            node_types_subquery = f"""
-                SELECT node_id 
-                FROM node_type_associations 
-                WHERE type_id IN (
-                    SELECT id FROM node_types WHERE name IN ({",".join("?" for _ in node_conditions)})
-                )
-                GROUP BY node_id
-                HAVING COUNT(DISTINCT type_id) {'=' if node_logic == "AND" else '>'} {len(node_conditions) if node_logic == "AND" else 0}
-            """
-            node_query = f"node.id IN ({node_types_subquery})"
+        edge_query, node_query = part_subquery('edge', edge_conditions, edge_logic), part_subquery('ndoe', node_conditions, node_logic)
 
-        # Subquery to filter edges based on the edge conditions
-        if edge_conditions:
-            edge_types_subquery = f"""
-                SELECT edge_id 
-                FROM edge_type_associations 
-                WHERE type_id IN (
-                    SELECT id FROM edge_types WHERE name IN ({",".join("?" for _ in edge_conditions)})
-                )
-                GROUP BY edge_id
-                HAVING COUNT(DISTINCT type_id) {'=' if edge_logic == "AND" else '>'} {len(edge_conditions) if edge_logic == "AND" else 0}
-            """
-            edge_query = f"(edge.id IN ({edge_types_subquery}))"
-
-        # Final query ensuring both ends of the edge satisfy the node condition
         query = f"""
             WITH FilteredNodes AS (
                 SELECT node.id, node.question, node.answer, node.x, node.y
@@ -66,13 +53,7 @@ class GraphDB:
             {"WHERE " + edge_query if edge_query else ""}
         """
 
-        params = []
-        if node_conditions:
-            params.extend(node_conditions)
-        if edge_conditions:
-            params.extend(edge_conditions)
-
-        cursor = self.conn.execute(query, params)
+        cursor = self.conn.execute(query, [*node_conditions, *edge_conditions])
         edges = cursor.fetchall()
 
         # Extracting the unique nodes from the edges
@@ -96,43 +77,27 @@ class GraphDB:
         # Return nodes and edges separately
         return nodes, edges
         
-    
-    def get_node_types(self, node_id):
+    def get_types(self, part, id):
+        assert part in ['node', 'edge']
         cursor = self.conn.cursor()
-        cursor.execute("SELECT nt.name FROM node_type_associations nta JOIN node_types nt ON nta.type_id = nt.id WHERE nta.node_id = ?", (node_id,))
+        cursor.execute(f"SELECT nt.name FROM {part}_type_associations nta JOIN node_types nt ON nta.type_id = nt.id WHERE nta.id = ?", (id,))
         return [row[0] for row in cursor.fetchall()]
-    
-    def get_edge_types(self, edge_id):
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT et.name FROM edge_type_associations eta JOIN edge_types et ON eta.type_id = et.id WHERE eta.edge_id = ?", (edge_id,))
-        return [row[0] for row in cursor.fetchall()]
-    
+         
     def close(self):
         self.conn.close()
-
-    def _get_node_type_id(self, name):
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT id FROM node_types WHERE name = ?", (name,))
-        result = cursor.fetchone()
-        return result[0] if result else self._add_node_type(name)
     
-    def _add_node_type(self, name):
+    def _get_id(self, table, name):
         cursor = self.conn.cursor()
-        cursor.execute("INSERT OR IGNORE INTO node_types (name) VALUES (?)", (name,))
+        cursor.execute(f"SELECT id FROM {table} WHERE name = ?", (name,))
+        result = cursor.fetchone()
+        return result[0] if result else self._add_into(table, name)
+    
+    def _add_into(self, table, name):
+        cursor = self.conn.cursor()
+        cursor.execute(f"INSERT OR IGNORE INTO {table} (name) VALUES (?)", (name,))
         self.conn.commit()
         return cursor.lastrowid
-
-    def _get_edge_type_id(self, name):
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT id FROM edge_types WHERE name = ?", (name,))
-        result = cursor.fetchone()
-        return result[0] if result else self._add_edge_type(name)
-    
-    def _add_edge_type(self, name):
-        cursor = self.conn.cursor()
-        cursor.execute("INSERT OR IGNORE INTO edge_types (name) VALUES (?)", (name,))
-        self.conn.commit()
-        return cursor.lastrowid
+       
     
     def _create_tables(self):
         self.conn.execute("CREATE TABLE IF NOT EXISTS nodes (id INTEGER PRIMARY KEY, question TEXT, answer TEXT, x INTEGER, y INTEGER)")
