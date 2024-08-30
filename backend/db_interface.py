@@ -3,11 +3,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 __all__ = ['GraphDB']
-
-@dataclass
-class Part:
-    type: Literal['node', 'edge']
-    
     
 class GraphDB:
     def __init__(self, db_name):
