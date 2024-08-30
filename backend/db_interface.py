@@ -1,6 +1,14 @@
 import sqlite3
+from dataclasses import dataclass
+from typing import Literal
 
 __all__ = ['GraphDB']
+
+@dataclass
+class Part:
+    type: Literal['node', 'edge']
+    
+    
 class GraphDB:
     def __init__(self, db_name):
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
@@ -25,10 +33,17 @@ class GraphDB:
         self.conn.commit()
         return edge_id
     
+    def delete_part(self, p, id):
+        cursor = self.conn.cursor()
+        self.conn.execute(f"DELETE FROM {p}_type_associations WHERE node_id = ?", (id,))
+        self.conn.execute(f"DELETE FROM {p}s WHERE id = ?", (id,))
+        self.conn.execute(f"""DELETE FROM {p}_types WHERE id NOT IN (SELECT type_id FROM {p}_type_associations)""")
+        if p == 'node': [self.delete_part(p='edge', id=eid) for eid in self.conn.execute("SELECT id FROM edges WHERE source_id = ? OR target_id = ?", (id, id)).fetchall()]
+           
     def get_subgraph(self, node_types=[], edge_types=[], node_logic="AND", edge_logic="AND"):
         assert edge_logic in ['AND', 'OR']
         assert node_logic in ['AND', 'OR']
-        def part_subquery(p, conditions, logic):
+        def part_subquery(p, conditions=[], logic="AND"):
             if conditions:
                 subquery = f"""
                     SELECT {p}_id FROM {p}_type_associations 
