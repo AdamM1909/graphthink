@@ -15,31 +15,19 @@ class GraphDB:
         self.conn.commit()
         return node_id
     
-    # def add_edge(self, source_id, target_id, edge_types=[]):
-    #     cursor = self.conn.cursor()
-    #     cursor.execute("INSERT INTO edges (source_id, target_id) VALUES (?, ?)", (source_id, target_id))
-    #     edge_id = cursor.lastrowid
-    #     for edge_type in edge_types: cursor.execute("INSERT INTO edge_type_associations (edge_id, type_id) VALUES (?, ?)", (edge_id, self._get_id('edge_types', edge_type)))
-    #     self.conn.commit()
-    #     return edge_id
-    
     def add_edge(self, source_id, target_id, edge_types=[]):
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id FROM edges WHERE source_id = ? AND target_id = ?", (source_id, target_id))
-        existing_edge = cursor.fetchone()
-        if existing_edge: return existing_edge[0]
-        else:
-            cursor.execute("INSERT INTO edges (source_id, target_id) VALUES (?, ?)", (source_id, target_id))
-            edge_id = cursor.lastrowid
+        cursor.execute("SELECT COUNT(*) FROM edges WHERE source_id = ? AND target_id = ?", (source_id, target_id))
+        assert not cursor.fetchone()[0], "Edge already exists."
+        cursor.execute("INSERT INTO edges (source_id, target_id) VALUES (?, ?)", (source_id, target_id))
+        edge_id = cursor.lastrowid
         for edge_type in edge_types: cursor.execute("INSERT INTO edge_type_associations (edge_id, type_id) VALUES (?, ?)", (edge_id, self._get_id('edge_types', edge_type)))
         self.conn.commit()
         return edge_id
     
-
-    def get_subgraph(self, node_conditions=[], edge_conditions=[], node_logic="AND", edge_logic="AND"):
+    def get_subgraph_ids(self, node_conditions=[], edge_conditions=[], node_logic="AND", edge_logic="AND"):
         assert edge_logic in ['AND', 'OR']
         assert node_logic in ['AND', 'OR']
-
         def part_subquery(p, conditions, logic):
             if conditions:
                 subquery = f"""
@@ -50,18 +38,18 @@ class GraphDB:
                 """
                 return f"{p}.id IN ({subquery})"
             return '1=1'
-
-        edge_query, node_query = part_subquery('edge', edge_conditions, edge_logic), part_subquery('node', node_conditions, node_logic)
-        cursor = self.conn.execute(f"""SELECT DISTINCT node.*, edge.* FROM nodes node JOIN edges edge ON node.id IN (edge.source_id, edge.target_id) WHERE {node_query} AND {edge_query}"""
-                                   ,[*node_conditions, *edge_conditions])
+        node_query, edge_query = part_subquery('node', node_conditions, node_logic), part_subquery('edge', edge_conditions, edge_logic)
+        query = f"""
+            SELECT DISTINCT node.id as node_id, edge.id as edge_id
+            FROM nodes node
+            JOIN edges edge ON (node.id = edge.source_id OR node.id = edge.target_id)
+            WHERE ({node_query}) AND ({edge_query})
+        """
+        cursor = self.conn.execute(query, [*node_conditions, *edge_conditions])
         results = cursor.fetchall()
-        ncols = [r['name'] for r  in self.conn.execute("PRAGMA table_info(nodes)").fetchall()]
-        nodes = [{col: row[col] for col in row.keys() if col in ncols} for row in results]
-        edges = [{col: row[col] for col in row.keys() if col not in ncols} for row in results]
-
-
-        return nodes, edges
-        
+        nodes, edges = list(set(r['node_id'] for r in results)), list(set(r['edge_id'] for r in results))
+        return nodes, edges if len(nodes) > 1 else []
+      
     def get_types(self, part, id):
         assert part in ['node', 'edge']
         cursor = self.conn.cursor()
@@ -89,11 +77,5 @@ class GraphDB:
         self.conn.execute("CREATE TABLE IF NOT EXISTS edge_types (id INTEGER PRIMARY KEY, name TEXT UNIQUE)")
         self.conn.execute("CREATE TABLE IF NOT EXISTS node_type_associations (node_id INTEGER, type_id INTEGER, FOREIGN KEY (node_id) REFERENCES nodes (id), FOREIGN KEY (type_id) REFERENCES node_types (id), PRIMARY KEY (node_id, type_id))")
         self.conn.execute("CREATE TABLE IF NOT EXISTS edge_type_associations (edge_id INTEGER, type_id INTEGER, FOREIGN KEY (edge_id) REFERENCES edges (id), FOREIGN KEY (type_id) REFERENCES edge_types (id), PRIMARY KEY (edge_id, type_id))")
-        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_node_type_associations_node_id ON node_type_associations(node_id)")
-        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_node_type_associations_type_id ON node_type_associations(type_id)")
-        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_edge_type_associations_edge_id ON edge_type_associations(edge_id)")
-        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_edge_type_associations_type_id ON edge_type_associations(type_id)")
-        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_edges_source_id ON edges(source_id)")
-        # self.conn.execute("CREATE INDEX IF NOT EXISTS idx_edges_target_id ON edges(target_id)")
         self.conn.commit()
         
