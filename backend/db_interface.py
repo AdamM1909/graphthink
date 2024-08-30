@@ -25,7 +25,7 @@ class GraphDB:
         self.conn.commit()
         return edge_id
     
-    def get_subgraph_ids(self, node_conditions=[], edge_conditions=[], node_logic="AND", edge_logic="AND"):
+    def get_subgraph(self, node_types=[], edge_types=[], node_logic="AND", edge_logic="AND"):
         assert edge_logic in ['AND', 'OR']
         assert node_logic in ['AND', 'OR']
         def part_subquery(p, conditions, logic):
@@ -38,14 +38,14 @@ class GraphDB:
                 """
                 return f"{p}.id IN ({subquery})"
             return '1=1'
-        node_query, edge_query = part_subquery('node', node_conditions, node_logic), part_subquery('edge', edge_conditions, edge_logic)
+        node_query, edge_query = part_subquery('node', node_types, node_logic), part_subquery('edge', edge_types, edge_logic)
         query = f"""
             SELECT DISTINCT node.id as node_id, edge.id as edge_id
             FROM nodes node
             JOIN edges edge ON (node.id = edge.source_id OR node.id = edge.target_id)
             WHERE ({node_query}) AND ({edge_query})
         """
-        cursor = self.conn.execute(query, [*node_conditions, *edge_conditions])
+        cursor = self.conn.execute(query, [*node_types, *edge_types])
         results = cursor.fetchall()
         nodes, edges = list(set(r['node_id'] for r in results)), list(set(r['edge_id'] for r in results))
         return nodes, edges if len(nodes) > 1 else []
