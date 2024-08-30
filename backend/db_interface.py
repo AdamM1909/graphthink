@@ -60,11 +60,12 @@ class GraphDB:
     
     def delete_part(self, p, id):
         cursor = self.conn.cursor()
-        self.conn.execute(f"DELETE FROM {p}_type_associations WHERE node_id = ?", (id,))
-        self.conn.execute(f"DELETE FROM {p}s WHERE id = ?", (id,))
-        self.conn.execute(f"""DELETE FROM {p}_types WHERE id NOT IN (SELECT type_id FROM {p}_type_associations)""")
-        if p == 'node': [self.delete_part(p='edge', id=eid) for eid in self.conn.execute("SELECT id FROM edges WHERE source_id = ? OR target_id = ?", (id, id)).fetchall()]
-      
+        cursor.execute(f"DELETE FROM {p}_type_associations WHERE {p}_id = ?", (id,))
+        cursor.execute(f"DELETE FROM {p}s WHERE id = ?", (id,))
+        cursor.execute(f"""DELETE FROM {p}_types WHERE id NOT IN (SELECT type_id FROM {p}_type_associations)""")
+        self.conn.commit()
+        if p == 'node': [self.delete_part(p='edge', id=r["id"]) for r in self.conn.execute("SELECT id FROM edges WHERE source_id = ? OR target_id = ?", (id, id)).fetchall()]
+        
     def get_types(self, part, id):
         assert part in ['node', 'edge']
         cursor = self.conn.cursor()
