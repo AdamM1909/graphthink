@@ -53,6 +53,16 @@ class GraphDB:
         self.conn.commit()
         return edge_id
     
+    def edit_part_types(self, part, id, new_types):
+        assert part in ['node', 'edge']
+        cursor = self.conn.cursor()
+        cursor.execute(f"DELETE FROM {part}_type_associations WHERE {part}_id = ?", (id,))
+        for type_name in new_types:
+            type_id = self._get_id(f'{part}_types', type_name)
+            cursor.execute(f"INSERT INTO {part}_type_associations ({part}_id, type_id) VALUES (?, ?)", (id, type_id))
+        cursor.execute(f"""DELETE FROM {part}_types WHERE id NOT IN (SELECT type_id FROM {part}_type_associations)""")
+        self.conn.commit()
+    
     def delete_part(self, p, id):
         cursor = self.conn.cursor()
         cursor.execute(f"DELETE FROM {p}_type_associations WHERE {p}_id = ?", (id,))
@@ -64,7 +74,7 @@ class GraphDB:
     def get_types(self, part, id):
         assert part in ['node', 'edge']
         cursor = self.conn.cursor()
-        cursor.execute(f"SELECT pta.name FROM {part}_type_associations pta JOIN node_types pt ON pta.type_id = pt.id WHERE pta.id = ?", (id,))
+        cursor.execute(f"SELECT pta.name FROM {part}_type_associations pta JOIN {part}_types pt ON pta.type_id = pt.id WHERE pta.id = ?", (id,))
         return [row[0] for row in cursor.fetchall()]
          
     def close(self): self.conn.close()
@@ -89,4 +99,3 @@ class GraphDB:
         self.conn.execute("CREATE TABLE IF NOT EXISTS node_type_associations (node_id INTEGER, type_id INTEGER, FOREIGN KEY (node_id) REFERENCES nodes (id), FOREIGN KEY (type_id) REFERENCES node_types (id), PRIMARY KEY (node_id, type_id))")
         self.conn.execute("CREATE TABLE IF NOT EXISTS edge_type_associations (edge_id INTEGER, type_id INTEGER, FOREIGN KEY (edge_id) REFERENCES edges (id), FOREIGN KEY (type_id) REFERENCES edge_types (id), PRIMARY KEY (edge_id, type_id))")
         self.conn.commit()
-        
