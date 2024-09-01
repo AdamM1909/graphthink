@@ -53,14 +53,14 @@ class GraphDB:
         self.conn.commit()
         return edge_id
     
-    def edit_part_types(self, part, id, new_types):
-        assert part in ['node', 'edge']
+    def edit_part_types(self, p, id, new_types):
+        assert p in ['node', 'edge']
         cursor = self.conn.cursor()
-        cursor.execute(f"DELETE FROM {part}_type_associations WHERE {part}_id = ?", (id,))
+        cursor.execute(f"DELETE FROM {p}_type_associations WHERE {p}_id = ?", (id,))
         for type_name in new_types:
-            type_id = self._get_id(f'{part}_types', type_name)
-            cursor.execute(f"INSERT INTO {part}_type_associations ({part}_id, type_id) VALUES (?, ?)", (id, type_id))
-        cursor.execute(f"""DELETE FROM {part}_types WHERE id NOT IN (SELECT type_id FROM {part}_type_associations)""")
+            type_id = self._get_id(f'{p}_types', type_name)
+            cursor.execute(f"INSERT INTO {p}_type_associations ({p}_id, type_id) VALUES (?, ?)", (id, type_id))
+        cursor.execute(f"""DELETE FROM {p}_types WHERE id NOT IN (SELECT type_id FROM {p}_type_associations)""")
         self.conn.commit()
     
     def delete_part(self, p, id):
