@@ -13,3 +13,5 @@
 
 # Ignore pycache
 *.pyc
+
+*.sesskey
