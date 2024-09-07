@@ -28,15 +28,16 @@ class GraphDB:
              return self.driver.execute_query("""MATCH (a) WHERE id(a) = $from_id MATCH (b) WHERE id(b) = $to_id CREATE (a)-[r:RELATED_TO {edge_tags: $edge_tags}]->(b)""", 
                                                dict(from_id=from_id, to_id=to_id, edge_tags=edge_tags))
 
-    def get_all_card_ids(self):
+    def get_schedule(self):
+        # dummy schedule for the moment 
         with self.driver.session() as session:
             result = session.run("MATCH (n:Node) RETURN id(n) as id ORDER BY id(n)")
-            return [record['id'] for record in result]
+            return [r['id'] for r in result]
     
     def get_card_by_id(self, id: int):
         with self.driver.session() as session:
             result = session.run("MATCH (n) WHERE id(n) = $id RETURN n.question as question, n.answer as answer", id=id)
-            return result.single()
+            return result.single().data()
         
     def __enter__(self): return self
     def __exit__(self, *args): self.close() 
