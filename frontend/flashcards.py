@@ -2,68 +2,63 @@ from fasthtml.common import *
 from backend.db import GraphDB
 
 app, rt = fast_app()
-db = GraphDB()  # Initialize the Neo4j database connection
+db = GraphDB()
 
 @rt('/')
 def get():
     return Titled("Flashcard Study",
         Main(
             P("Click the button below to start your study session."),
-            Button("Begin Study", 
-                   hx_get="/study",
-                   hx_push_url="true",
-                   hx_target="body")
-        )
+            Button("Begin Study", hx_get="/study", hx_push_url="true", hx_target="body"))
     )
 
 @rt('/study')
-def get_study():
-    card_ids = db.get_all_card_ids()
+def get_study(session):
+    session["schedule"], session["schedule_idx"]  = db.get_schedule(), 0
     return Main(
-            Div(id="flashcard-container", 
-                style="padding-top: 30px; text-align: center;"),
-            Script(f"htmx.ajax('GET', '/study/card/{card_ids[0]}', {{target:'#flashcard-container'}})")
+        Div(Button("Back to Home", hx_get="/", hx_push_url="true", hx_target="body"), id="back-to-home-button", style="position: absolute; top: 10px; left: 10px;"),
+        Div(id="flashcard-container", style="padding-top: 30px; text-align: center;"),
+        Div(id="button-container",style="position: fixed; bottom: 10%; left: 0; right: 0; text-align: center;"),
+        Script(f"htmx.ajax('GET', '/study/card/', {{target:'#flashcard-container'}})")
+    )
+
+@rt('/study/card/')
+def get_card(session):
+    session["current_card"] = db.get_card_by_id(session["schedule"][session["schedule_idx"]])
+    return (
+        Div(P(session["current_card"]["question"], style="text-align: center;"), style="text-align: center;", id="flashcard-container"),
+        Div(Button("Reveal Answer", hx_get=f"/study/card/reveal", hx_target="#flashcard-container"), hx_swap_oob="innerHTML", id="button-container")
         )
 
-@rt('/study/card/{card_id}')
-def get_next_card(card_id: int):
-    card = db.get_card_by_id(card_id)
-    if not card:
-        return P("No more cards to study!")
-    
-    return Div(
-        P(card['question'], style="text-align: center; font-size: 1.5em;"),
-        Button("Reveal Answer", 
-               hx_get=f"/study/card/{card_id}/reveal",
-               hx_target="#flashcard-container"),
-        style="text-align: center;"
+@rt('/study/card/reveal')
+def get_reveal_answer(session):
+    if (session["schedule_idx"] + 1) == len(session["schedule"]): session["schedule_idx"] = None
+    else: session["schedule_idx"] += 1 
+    return (
+        Div(
+            P(session["current_card"]["question"], style="text-align: center; margin-bottom: 5px;"),
+            Div(Hr(style="border: 0; height: 1px; background: #ccc; width: 70%;"), style="display: flex; justify-content: center;"),
+            P(session["current_card"]["answer"], style="text-align: center; margin-top: 5px;"),
+            style="text-align: center;",
+            id="flashcard-container"
+        ),
+        Div(
+            Button("Next Flashcard" if session["schedule_idx"] else "Complete Session", 
+                   hx_get=f"/study/card/" if session["schedule_idx"] else "/study/complete",
+                   hx_target="#flashcard-container"),
+            hx_swap_oob="innerHTML",
+            id="button-container"
+        )
     )
-
-@rt('/study/card/{card_id}/reveal')
-def get_reveal_answer(card_id: int):
-    card = db.get_card_by_id(card_id)
-    if not card:
-        return P("Card not found!")
     
-    all_card_ids = db.get_all_card_ids()
-    next_card_id = next((id for id in all_card_ids if id > card_id), None)
-    
-    return Div(
-        P(card['question'], style="text-align: center; font-size: 1.5em;"),
-        P(card['answer'], style="text-align: center; font-size: 1.5em;"),
-        Button("Next Flashcard" if next_card_id else "Complete Session", 
-               hx_get=f"/study/card/{next_card_id}" if next_card_id else "/study/complete",
-               hx_target="#flashcard-container"),
-        style="text-align: center;"
-    )
-
 @rt('/study/complete')
 def get_study_complete():
-    return Div(
-        P("You've gone through all the flashcards.", style="text-align: center;"),
-        A("Start New Session", href="/study", cls="btn"),
-        A("Back to Home", href="/", cls="btn"),
-        style="text-align: center;"
-    )
+    return Main(
+        Div(
+            P("Well done! You've gone through all the flashcards.", style="text-align: center; margin-bottom: 50px;"),
+            Button("Back to Home", hx_get="/", hx_push_url="true", hx_target="body"), style="text-align: center;"),
+        Div(hx_swap_oob="delete", id="button-container"),
+        Div(hx_swap_oob="delete", id="back-to-home-button")
+        )
 
 serve()
