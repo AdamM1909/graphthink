@@ -1,7 +1,7 @@
 from fasthtml.common import *
 from backend.db import GraphDB
 
-app, rt = fast_app()
+app, rt = fast_app(debug=True)
 db = GraphDB()
 
 @rt('/')
@@ -11,6 +11,8 @@ def get():
             P("Click the button below to start your study session."),
             Button("Begin Study", hx_get="/study", hx_push_url="true", hx_target="body"))
     )
+    
+# / / / / / / / / / Study / / / / / / / / / #
 
 @rt('/study')
 def get_study(session):
@@ -21,7 +23,7 @@ def get_study(session):
         Div(id="button-container",style="position: fixed; bottom: 10%; left: 0; right: 0; text-align: center;"),
         Script(f"htmx.ajax('GET', '/study/card/', {{target:'#flashcard-container'}})")
     )
-
+    
 @rt('/study/card/')
 def get_card(session):
     session["current_card"] = db.get_card_by_id(session["schedule"][session["schedule_idx"]])
@@ -60,5 +62,8 @@ def get_study_complete():
         Div(hx_swap_oob="delete", id="button-container"),
         Div(hx_swap_oob="delete", id="back-to-home-button")
         )
+    
+# / / / / / / / / / Connect / / / / / / / / / #
+    
 
 serve()
