@@ -8,6 +8,7 @@ __all__ = ['GraphDB']
 load_dotenv()
 ANKI_DB_PATH, NEO4JURI, NEO4JUSR, NEO4JPASS = os.getenv('ANKI_DB_PATH'), os.getenv('NEO4JURI'), os.getenv('NEO4JUSR'), os.getenv('NEO4JPASS')
 
+
 class GraphDB:
     def __init__(self, uri=NEO4JURI, username=NEO4JUSR, password=NEO4JPASS):
         self.driver = GraphDatabase.driver(uri, auth=(username, password))
