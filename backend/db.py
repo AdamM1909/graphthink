@@ -1,24 +1,15 @@
-#   docker run \
-#   --name neo4j \
-#   -p 7474:7474 -p 7687:7687 \
-#   -v ~/neo4j/data:/data \
-#   -v ~/neo4j/logs:/logs \
-#   -e NEO4J_AUTH=neo4j/password \
-#   -e NEO4J_PLUGINS='["graph-data-science"]' \
-#   -d neo4j:latest
-# http://localhost:7474/browser/
-# graph deck
-
 from neo4j import GraphDatabase, EagerResult
 from anki.collection import Collection
+from dotenv import load_dotenv
+import os 
+
 
 __all__ = ['GraphDB']
-
-ANKI_DB_PATH = "/Users/adammyers/Library/Application Support/Anki2/User 1/collection.anki2"
-
+load_dotenv()
+ANKI_DB_PATH, NEO4JURI, NEO4JUSR, NEO4JPASS = os.getenv('ANKI_DB_PATH'), os.getenv('NEO4JURI'), os.getenv('NEO4JUSR'), os.getenv('NEO4JPASS')
 
 class GraphDB:
-    def __init__(self, uri="bolt://localhost:7687", username="neo4j", password="password"):
+    def __init__(self, uri=NEO4JURI, username=NEO4JUSR, password=NEO4JPASS):
         self.driver = GraphDatabase.driver(uri, auth=(username, password))
         
     def add_edge(self, from_note_id, to_note_id, edge_tags) -> None:
