@@ -1,21 +1,16 @@
-
-# add a few boxes like select tag, then give a drop down of all questions to pick from. 
-
+from functools import lru_cache
 from backend.db import *
 from fasthtml.common import *
 
+
 app, rt = fast_app()
 
-decks = ['ch1', 'ch2', 'ch3']
-questions = {
-    'ch1': ['lesson1', 'lesson2', 'lesson3'],
-    'ch2': ['lesson4', 'lesson5', 'lesson6'],
-    'ch3': ['lesson7', 'lesson8', 'lesson9']
-}
+with GraphDB() as db:
+    deck_qs = {r['n.deck_name']: r['nodes'] for r in db.q("MATCH (n)  RETURN n.deck_name, collect(n) AS nodes").records}
 
 def make_dropdown(name, options): return (Option(f'-- select {name} --', disabled='', selected='', value=''), *map(Option, options))
 def make_node_selection_column(to_from):  
-    deck_dropdown = Select(*make_dropdown('deck', decks), name='deck', hx_get='/questions', hx_target=f'#questions_{to_from}')
+    deck_dropdown = Select(*make_dropdown('deck', list(deck_qs.keys())), name='deck', hx_get='/questions', hx_target=f'#questions_{to_from}')
     question_dropdown = Select(id=f'questions_{to_from}')
     return  Div(Div(deck_dropdown),Div(question_dropdown))
 
@@ -32,9 +27,9 @@ def homepage():
             cls="container"
         )
     )
-
-    
+   
 @rt('/questions')
-def questions_in_deck(deck: str): return make_dropdown('flashcard', questions[deck])
+@lru_cache(maxsize=None)
+def questions_in_deck(deck: str): return make_dropdown('flashcard', [node['question'] for node in deck_qs[deck]])
     
 serve()

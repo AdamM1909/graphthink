@@ -1,10 +1,12 @@
 from fasthtml.common import *
+from backend.db import *
 
 app, rt = fast_app()
 
 @rt('/')
 def get():
-    options = ['a', 'b', 'c']
+    with GraphDB() as db:
+        options = [r['n.deck_name'] for r in db.q("MATCH (n) RETURN DISTINCT n.deck_name").records]
     
     checkbox_group = Div(
         *[CheckboxX(id=f"option-{opt}", label=opt, name="options", value=opt) for opt in options],
