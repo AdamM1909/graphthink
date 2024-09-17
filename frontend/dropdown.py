@@ -6,10 +6,10 @@ app, rt = fast_app()
 @rt('/')
 def get():
     with GraphDB() as db:
-        options = [r['n.deck_name'] for r in db.q("MATCH (n) RETURN DISTINCT n.deck_name").records]
+        tags = [r['tag'] for r in db.q("MATCH ()-[r]->() UNWIND r.relationship_tags AS tag RETURN DISTINCT tag").records]
     
     checkbox_group = Div(
-        *[CheckboxX(id=f"option-{opt}", label=opt, name="options", value=opt) for opt in options],
+        *[CheckboxX(id=f"option-{opt}", label=opt, name="options", value=opt) for opt in tags],
         id="checkbox-group"
     )
     

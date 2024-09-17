@@ -12,9 +12,10 @@ class GraphDB:
     def __init__(self, uri=NEO4JURI, username=NEO4JUSR, password=NEO4JPASS):
         self.driver = GraphDatabase.driver(uri, auth=(username, password))
         
-    def add_edge(self, from_note_id, to_note_id, edge_tags) -> None:
-        return self.q("""MATCH (from) WHERE from.note_id = $from_note_id MATCH (to) WHERE to.note_id = $to_note_id CREATE (from)-[r:RELATED_TO {edge_tags: $edge_tags}]->(to)""",
-                            dict(from_note_id=from_note_id, to_note_id=to_note_id, edge_tags=edge_tags))
+    def add_relationship(self, from_note_id, to_note_id, relationship_tags) -> None:
+        assert isinstance(relationship_tags, list)
+        return self.q("""MATCH (from) WHERE from.note_id = $from_note_id MATCH (to) WHERE to.note_id = $to_note_id CREATE (from)-[r:relationship {relationship_tags: $relationship_tags}]->(to)""",
+                            dict(from_note_id=from_note_id, to_note_id=to_note_id, relationship_tags=relationship_tags))
         
     def sync_anki(self): 
         with ADB() as adb:
