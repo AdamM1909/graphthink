@@ -18,7 +18,7 @@ class GraphDB:
                             dict(from_note_id=from_note_id, to_note_id=to_note_id, relationship_tags=relationship_tags))
         
     def sync_anki(self): 
-        with ADB() as adb:
+        with AnkiDB() as adb:
             notes = {id: adb.collection.get_note(id) for id in adb.collection.find_notes("")}
             anki_data = [dict(note_id=note.id, question=note.fields[0], answer=note.fields[1], deck_name=adb.deck_name(note.id), tags=note.tags) for note in notes.values()]
 
@@ -45,7 +45,7 @@ class GraphDB:
     def __enter__(self): return self
     def __exit__(self, *args): self.close() 
     
-class ADB():
+class AnkiDB():
     def __init__(self, path=ANKI_DB_PATH):
         self.collection = Collection(path)
 
