@@ -13,10 +13,12 @@ custom_styles = """
     .update_connection_gui_checkboxes {display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding: 5px; border-radius: 5px;}
     .update_connection_gui_checkboxes label {flex-grow: 1; margin-right: 10px;}
     .update_connection_gui_checkboxes input[type="checkbox"] {width: 16px; height: 16px; margin: 0; padding: 0;}
+    
+    
     .update_connection_gui_new_tag_input {display: flex; justify-content: space-between; align-items: stretch; margin-bottom: 10px;}
     .update_connection_gui_new_tag_input input {flex-grow: 1; margin-right: 10px; height: 38px; padding: 0 10px; box-sizing: border-box;}
     .update_connection_gui_new_tag_input button {width: auto; padding: 0 15px; height: 38px; box-sizing: border-box;}
-    .submitupdate_connection_submit_btn_btn button {border: 0.5px solid transparent;}
+    .update_connection_submit_btn button {border: 0.5px solid transparent;}
     .update_connection_submit_btn button:hover {border-color: white;}
 </style>
 """
@@ -71,7 +73,7 @@ def mk_tag_gui():
 
 @rt('/add_tag')
 def add_tag(tag: dict):
-    new_checkbox = Div(Label(tag["new_tag"]), CheckboxX(id=tag["new_tag"], checked=True), cls="checkbox-container")
+    new_checkbox = Div(Label(tag["new_tag"]), CheckboxX(id=tag["new_tag"], checked=True), cls="update_connection_gui_checkboxes")
     refreshed_new_tag_input = Input(id="new_tag", placeholder="Type to create new tag ...", hx_swap_oob="true")
     return new_checkbox, refreshed_new_tag_input
 
