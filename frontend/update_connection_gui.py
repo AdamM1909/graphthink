@@ -30,8 +30,6 @@ app, rt = fast_app(pico=True, hdrs=(NotStr(custom_styles),))
 with GraphDB() as db:
     deck_qs = {r['n.deck_name']: r['nodes'] for r in db.q("MATCH (n)  RETURN n.deck_name, collect(n) AS nodes").records}
 
-# def mk_dropdown(name, options): return (Option(f'-- select {name} --', disabled='', selected='', value=''), *map(Option, options))
-
 
 def mk_dropdown(name, options): 
     ops = map(lambda k: Option(k, value=options[k]), options) if isinstance(options, dict) else map(Option, options)
@@ -48,10 +46,7 @@ def mk_node_column(to_from):
 def questions_in_deck(deck: str): 
     return mk_dropdown('flashcard', {node['question']: node['note_id'] for node in deck_qs[deck]})
 
-# @rt('/questions_in_deck')
-# @lru_cache(maxsize=None)
-# def questions_in_deck(deck: str): return mk_dropdown('flashcard', [node['question'] for node in deck_qs[deck]])
-   
+
 def mk_select_pair_gui():
     return Div(
                 Div(
@@ -91,15 +86,10 @@ def add_tag(tag: dict):
 
 @app.post('/submit_tag_update')
 def submit_tag_update(d: dict): 
-    tags = [k for k, v in d.items() if isinstance(v, list)] # the checked tags are lists
+    tags = [k for k, v in d.items() if isinstance(v, list)] # Checked tags are lists.
     with GraphDB() as db:
         db.add_relationship(int(d['note_id_from']), int(d['note_id_to']), tags)
     return ', '.join(tags)
-
-# @app.post('/submit_tag_update')
-# def submit_tag_update(checkbox_form: dict): 
-    
-#     return ', '.join((k for k, v in checkbox_form.items() if isinstance(v, list)))
 
 # --------- homepage ---------
 
