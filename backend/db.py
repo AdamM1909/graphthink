@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import os 
 
 
-__all__ = ['GraphDB']
+__all__ = ['GraphDB', 'AnkiDB']
 load_dotenv()
 ANKI_DB_PATH, NEO4JURI, NEO4JUSR, NEO4JPASS = os.getenv('ANKI_DB_PATH'), os.getenv('NEO4JURI'), os.getenv('NEO4JUSR'), os.getenv('NEO4JPASS')
 
@@ -19,9 +19,11 @@ class GraphDB:
         
     def sync_anki(self): 
         with AnkiDB() as adb:
-            notes = {id: adb.collection.get_note(id) for id in adb.collection.find_notes("")}
+            notes = {id: adb.collection.get_note(id) for d  in adb.collection.decks.all_names_and_ids() if 'GraphThink' in d.name
+                     for id in adb.collection.find_notes(f"did:{d.id}")}
+        
             anki_data = [dict(note_id=note.id, question=note.fields[0], answer=note.fields[1], deck_name=adb.deck_name(note.id), tags=note.tags) for note in notes.values()]
-
+            
         with self.driver.session() as session:
             sql = f"""
                 UNWIND $node_data AS data
@@ -35,7 +37,7 @@ class GraphDB:
             result = session.write_transaction(lambda tx, anki_data: tx.run(sql, node_data=anki_data).data() , anki_data)
         
         self.q("""MATCH (n:Node) WHERE NOT n.note_id IN $note_ids DETACH DELETE n""", dict(note_ids=list(notes.keys())))
-        assert (ngdb := len(result)) == (nanki := len(notes)), "Number of cards in anki and neo4j do not match, Anki has {nanki} GraphDB has {ngdb}."
+        assert (ngdb := len(result)) == (nanki := len(anki_data)), f"Number of cards in anki and neo4j do not match, Anki has {nanki} GraphDB has {ngdb}."
 
     def q(self, sql: str, params = None) -> EagerResult: return self.driver.execute_query(sql, params)
                    
