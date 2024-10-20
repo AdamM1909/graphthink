@@ -25,6 +25,14 @@ custom_styles = """
 
 app, rt = fast_app(pico=True, hdrs=(NotStr(custom_styles),))
 
+
+# TODO: Make the tags of the currently selected pair be ticked by default:
+#     tags = self.q("""
+#         MATCH (from)-[r]->(to)
+#         WHERE from.note_id = $from_note_id AND to.note_id = $to_note_id
+#         RETURN r.relationship_tags AS tags
+#     """, dict(from_note_id=from_note_id, to_note_id=to_note_id))
+
 # --------- select_pair_gui --------- #
 
 with GraphDB() as db:
