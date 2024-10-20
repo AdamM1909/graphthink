@@ -12,10 +12,13 @@ class GraphDB:
     def __init__(self, uri=NEO4JURI, username=NEO4JUSR, password=NEO4JPASS):
         self.driver = GraphDatabase.driver(uri, auth=(username, password))
         
-    def add_relationship(self, from_note_id, to_note_id, relationship_tags) -> None:
+    def add_relationship(self, from_note_id: int, to_note_id: int , relationship_tags: list) -> None:
+        assert isinstance(from_note_id, int), isinstance(to_note_id, int)
         assert isinstance(relationship_tags, list)
-        return self.q("""MATCH (from) WHERE from.note_id = $from_note_id MATCH (to) WHERE to.note_id = $to_note_id CREATE (from)-[r:relationship {relationship_tags: $relationship_tags}]->(to)""",
-                            dict(from_note_id=from_note_id, to_note_id=to_note_id, relationship_tags=relationship_tags))
+        self.q("""MATCH (from)-[r]->(to) WHERE from.note_id = $from_note_id AND to.note_id = $to_note_id DELETE r""", dict(from_note_id=from_note_id, to_note_id=to_note_id))
+        if relationship_tags:
+            return self.q("""MATCH (from) WHERE from.note_id = $from_note_id MATCH (to) WHERE to.note_id = $to_note_id CREATE (from)-[r:relationship {relationship_tags: $relationship_tags}]->(to)""",
+                                dict(from_note_id=from_note_id, to_note_id=to_note_id, relationship_tags=relationship_tags))
         
     def sync_anki(self): 
         with AnkiDB() as adb:
@@ -39,8 +42,7 @@ class GraphDB:
         self.q("""MATCH (n:Node) WHERE NOT n.note_id IN $note_ids DETACH DELETE n""", dict(note_ids=list(notes.keys())))
         assert (ngdb := len(result)) == (nanki := len(anki_data)), f"Number of cards in anki and neo4j do not match, Anki has {nanki} GraphDB has {ngdb}."
 
-    def q(self, sql: str, params = None) -> EagerResult: return self.driver.execute_query(sql, params)
-                   
+    def q(self, sql: str, params = None) -> EagerResult: return self.driver.execute_query(sql, params)              
     def setup(self): self.q("CREATE INDEX note_id IF NOT EXISTS FOR (n:Node) ON (n.note_id)")   
     def close(self): 
         if self.driver is not None: self.driver.close()
