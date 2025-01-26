@@ -22,7 +22,6 @@ class GraphDB:
     def __init__(self, uri=NEO4JURI, username=NEO4JUSR, password=NEO4JPASS):
         self.driver = GraphDatabase.driver(uri, auth=(username, password))
         self.q("CREATE INDEX id IF NOT EXISTS FOR (v:V) ON (v.id)")
-        
     def add_edge(self, uid: int, vid: int, tags: list = None):
         if uid == vid: return
         self.q("""MATCH (u {id: $uid}), (v {id: $vid}) MERGE (u)-[ {tags: $tags}]->(v)""", dict(uid=uid, vid=vid, tags=tags or []))     
