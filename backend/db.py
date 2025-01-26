@@ -13,7 +13,7 @@ class GraphDB:
         self.driver = GraphDatabase.driver(uri, auth=(username, password))
         
     def add_relationship(self, from_note_id: int, to_note_id: int , relationship_tags: list) -> None:
-        assert isinstance(from_note_id, int), isinstance(to_note_id, int)
+        assert isinstance(from_note_id, int) & isinstance(to_note_id, int) & (from_note_id != to_note_id)
         assert isinstance(relationship_tags, list)
         self.q("""MATCH (from)-[r]->(to) WHERE from.note_id = $from_note_id AND to.note_id = $to_note_id DELETE r""", dict(from_note_id=from_note_id, to_note_id=to_note_id))
         if relationship_tags:
@@ -22,7 +22,7 @@ class GraphDB:
         
     def sync_anki(self): 
         with AnkiDB() as adb:
-            notes = {id: adb.collection.get_note(id) for d  in adb.collection.decks.all_names_and_ids() if 'GraphThink' in d.name
+            notes = {id: adb.collection.get_note(id) for d in adb.collection.decks.all_names_and_ids() if 'GraphThink' in d.name
                      for id in adb.collection.find_notes(f"did:{d.id}")}
         
             anki_data = [dict(note_id=note.id, question=note.fields[0], answer=note.fields[1], deck_name=adb.deck_name(note.id), tags=note.tags) for note in notes.values()]
