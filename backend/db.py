@@ -26,6 +26,7 @@ class GraphDB:
     def add_edge(self, uid: int, vid: int, tags: list = None):
         if uid == vid: return
         self.q("""MATCH (u {id: $uid}), (v {id: $vid}) MERGE (u)-[ {tags: $tags}]->(v)""", dict(uid=uid, vid=vid, tags=tags or []))     
+    def id_from_q(self, q: str) -> int: return self.q("MATCH (v:V) WHERE v.q CONTAINS $q RETURN v.id", dict(q=q))[0][0]
     def q(self, sql: str, params: dict = None) -> EagerResult: return self.driver.execute_query(sql, params)                
     def close(self): 
         if self.driver is not None: self.driver.close()
