@@ -8,57 +8,62 @@ __all__ = ['GraphDB', 'AnkiDB']
 load_dotenv()
 ANKI_DB_PATH, NEO4JURI, NEO4JUSR, NEO4JPASS = os.getenv('ANKI_DB_PATH'), os.getenv('NEO4JURI'), os.getenv('NEO4JUSR'), os.getenv('NEO4JPASS')
 
+
+# Nomenclature:
+# v, vs   : vertex/vertices (flashcards)
+# e, es   : edge/edges (relationships)
+# id      : vertex id
+# uid,vid : source/target vertex ids
+# tags    : edge metadata
+# ns      : anki notes
+# q       : question
+# a       : answer 
+# d       : deck
+
+
 class GraphDB:
     def __init__(self, uri=NEO4JURI, username=NEO4JUSR, password=NEO4JPASS):
         self.driver = GraphDatabase.driver(uri, auth=(username, password))
         
-    def add_relationship(self, from_note_id: int, to_note_id: int , relationship_tags: list) -> None:
-        assert isinstance(from_note_id, int) & isinstance(to_note_id, int) & (from_note_id != to_note_id)
-        assert isinstance(relationship_tags, list)
-        self.q("""MATCH (from)-[r]->(to) WHERE from.note_id = $from_note_id AND to.note_id = $to_note_id DELETE r""", dict(from_note_id=from_note_id, to_note_id=to_note_id))
-        if relationship_tags:
-            return self.q("""MATCH (from) WHERE from.note_id = $from_note_id MATCH (to) WHERE to.note_id = $to_note_id CREATE (from)-[r:relationship {relationship_tags: $relationship_tags}]->(to)""",
-                                dict(from_note_id=from_note_id, to_note_id=to_note_id, relationship_tags=relationship_tags))
-        
-    def sync_anki(self): 
-        with AnkiDB() as adb:
-            notes = {id: adb.collection.get_note(id) for d in adb.collection.decks.all_names_and_ids() if 'GraphThink' in d.name
-                     for id in adb.collection.find_notes(f"did:{d.id}")}
-        
-            anki_data = [dict(note_id=note.id, question=note.fields[0], answer=note.fields[1], deck_name=adb.deck_name(note.id), tags=note.tags) for note in notes.values()]
-            
-        with self.driver.session() as session:
-            sql = f"""
-                UNWIND $node_data AS data
-                MERGE (n:Node {{note_id: data.note_id}})
-                ON CREATE SET
-                    {','.join([f"n.{f} = data.{f}" for f in anki_data[0].keys()])}
-                ON MATCH SET
-                    {','.join([f"n.{f} = CASE WHEN n.{f} <> data.{f} THEN data.{f} ELSE n.{f} END" for f in anki_data[0].keys()])}
-                RETURN n
-                """
-            result = session.write_transaction(lambda tx, anki_data: tx.run(sql, node_data=anki_data).data() , anki_data)
-        
-        self.q("""MATCH (n:Node) WHERE NOT n.note_id IN $note_ids DETACH DELETE n""", dict(note_ids=list(notes.keys())))
-        assert (ngdb := len(result)) == (nanki := len(anki_data)), f"Number of cards in anki and neo4j do not match, Anki has {nanki} GraphDB has {ngdb}."
+    def add_relationship(self, uid: int, vid: int, tags: list = None):
+        if uid == vid: return
+        self.q("""MATCH (u {id: $uid}), (v {id: $vid}) MERGE (u)-[ {tags: $tags}]->(v)""", dict(uid=uid, vid=vid, tags=tags or []))
 
-    def q(self, sql: str, params = None) -> EagerResult: return self.driver.execute_query(sql, params)              
-    def setup(self): self.q("CREATE INDEX note_id IF NOT EXISTS FOR (n:Node) ON (n.note_id)")   
+    def sync_anki(self):
+        with AnkiDB() as adb:
+            ns = []
+            for d in adb.collection.decks.all_names_and_ids():
+                if 'GraphThink' not in d.name: continue
+                for nid in adb.collection.find_notes(f"did:{d.id}"):
+                    n = adb.collection.get_note(nid)
+                    ns.append(dict(id=n.id, q=n.fields[0], a=n.fields[1], d=adb.deck_name(n.id), tags=n.tags))
+        
+        fields = list(ns[0].keys())
+        sql = f"""
+            UNWIND $ns AS n
+            MERGE (v {{id: n.id}})
+            ON CREATE SET {','.join(f'v.{f}=n.{f}' for f in fields)}
+            ON MATCH SET {','.join(f'v.{f}=CASE WHEN v.{f}<>n.{f} THEN n.{f} ELSE v.{f} END' for f in fields)}
+            RETURN v"""
+
+        res = self.driver.session().write_transaction(lambda tx, ns: tx.run(sql, ns=ns).data(), ns)
+        self.q("MATCH (v) WHERE NOT v.id IN $ids DETACH DELETE v", dict(ids=[n['id'] for n in ns]))
+        assert len(res) == len(ns), f"Vertex count mismatch: Neo4j={len(res)} Anki={len(ns)}"
+
+    def setup(self): self.q("CREATE INDEX id IF NOT EXISTS FOR (v) ON (v.id)")     
+    def q(self, sql: str, params: dict = None) -> EagerResult: return self.driver.execute_query(sql, params)                
     def close(self): 
         if self.driver is not None: self.driver.close()
     def __enter__(self): return self
-    def __exit__(self, *args): self.close() 
-    
-class AnkiDB():
-    def __init__(self, path=ANKI_DB_PATH):
-        self.collection = Collection(path)
+    def __exit__(self, *args): self.close()
 
-    def deck_name(self, note_id):
-        card_ids = self.collection.find_cards(f"nid:{note_id}")
-        return self.collection.decks.name(self.collection.get_card(card_ids[0]).did)
-    
+class AnkiDB():
+    def __init__(self, path = ANKI_DB_PATH):
+        self.collection = Collection(path)
+    def deck_name(self, id): return self.collection.decks.name(self.collection.get_card(self.collection.find_cards(f"nid:{id}")[0]).did)
     def close(self): 
         if self.collection is not None: self.collection.close()
     def __enter__(self): return self
-    def __exit__(self, *args): self.close() 
+    def __exit__(self, *args): self.close()
+
  
