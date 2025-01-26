@@ -8,17 +8,15 @@ def anki2graphsync(adb, gdb):
             n = adb.collection.get_note(nid)
             ns.append(dict(id=n.id, q=n.fields[0], a=n.fields[1], d=adb.deck_name(n.id), tags=n.tags))
     
-    fields = list(ns[0].keys())
     gdb.q(f"""
         UNWIND $ns AS n
         MERGE (v:V {{id: n.id}})
-        ON CREATE SET {','.join(f'v.{f}=n.{f}' for f in fields)}
-        ON MATCH SET {','.join(f'v.{f}=CASE WHEN v.{f}<>n.{f} THEN n.{f} ELSE v.{f} END' for f in fields)}
+        ON CREATE SET {','.join(f'v.{f}=n.{f}' for f in VERTEX_FIELDS)}
+        ON MATCH SET {','.join(f'v.{f}=CASE WHEN v.{f}<>n.{f} THEN n.{f} ELSE v.{f} END' for f in VERTEX_FIELDS)}
         RETURN v""", dict(ns=ns))
-    
     gdb.q("MATCH (v:V) WHERE NOT v.id IN $ids DETACH DELETE v", dict(ids=[n['id'] for n in ns]))
-    n = gdb.q("MATCH (v:V) RETURN count(v) as n")[0][0]["n"]
-    assert n == len(ns), f"Vertex count mismatch: Neo4j={n} Anki={len(ns)}"
+    
+    assert (n := gdb.q("MATCH (v:V) RETURN count(v) as n")[0][0]["n"]) == len(ns), f"Vertex count mismatch: Neo4j={n} Anki={len(ns)}"
     
     
 def make_anki_deck(adb, vs, deck_name):

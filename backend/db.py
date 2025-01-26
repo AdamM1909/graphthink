@@ -4,22 +4,20 @@ from dotenv import load_dotenv
 import os 
 
 
-__all__ = ['GraphDB', 'AnkiDB']
+__all__ = ['GraphDB', 'AnkiDB', 'VERTEX_FIELDS']
 load_dotenv()
 ANKI_DB_PATH, NEO4JURI, NEO4JUSR, NEO4JPASS = os.getenv('ANKI_DB_PATH'), os.getenv('NEO4JURI'), os.getenv('NEO4JUSR'), os.getenv('NEO4JPASS')
 
 # Nomenclature:
-# v, vs   : vertex/vertices (flashcards)
+# (u, v), vs   : vertex/vertices (flashcards)
 # e, es   : edge/edges (relationships)
-# id      : vertex id
-# uid,vid : source/target vertex ids
-# tags    : edge / vertex tags
-# ns      : anki notes
+# id      : id
 # q       : question
 # a       : answer 
 # d       : deck
+# tags    : edge / vertex tags
 
-
+VERTEX_FIELDS = ['id', 'q', 'a', 'd', 'tags']
 class GraphDB:
     def __init__(self, uri=NEO4JURI, username=NEO4JUSR, password=NEO4JPASS):
         self.driver = GraphDatabase.driver(uri, auth=(username, password))
