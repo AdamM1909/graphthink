@@ -36,7 +36,7 @@ app, rt = fast_app(pico=True, hdrs=(NotStr(custom_styles),))
 # --------- select_pair_gui --------- #
 
 with GraphDB() as db:
-    deck_qs = {r['n.deck_name']: r['nodes'] for r in db.q("MATCH (n)  RETURN n.deck_name, collect(n) AS nodes").records}
+    deck_qs = {r['n.d']: r['nodes'] for r in db.q("MATCH (n)  RETURN n.d, collect(n) AS nodes").records}
 
 
 def mk_dropdown(name, options): 
@@ -68,7 +68,7 @@ def mk_select_pair_gui():
 
 def get_tags():
     with GraphDB() as db:
-        return [r['tag'] for r in db.q("MATCH ()-[r]->() UNWIND r.relationship_tags AS tag RETURN DISTINCT tag").records]
+        return [r['tag'] for r in db.q("MATCH ()-[r]->() UNWIND r.tags AS tag RETURN DISTINCT tag").records]
 
 def mk_tag_gui(): 
     checkbox_form = Form(*[Div(Label(tag), CheckboxX(id=tag), cls="update_connection_gui_checkboxes") for tag in get_tags()], id='checkbox_form')
