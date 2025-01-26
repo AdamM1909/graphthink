@@ -96,7 +96,7 @@ def add_tag(tag: dict):
 def submit_tag_update(d: dict): 
     tags = [k for k, v in d.items() if isinstance(v, list)] # Checked tags are lists.
     with GraphDB() as db:
-        db.add_relationship(int(d['note_id_from']), int(d['note_id_to']), tags)
+        db.add_edge(int(d['note_id_from']), int(d['note_id_to']), tags)
     return ', '.join(tags)
 
 # --------- homepage ---------
